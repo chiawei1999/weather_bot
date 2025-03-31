@@ -1,0 +1,77 @@
+name: Deploy to EC2 + Cloudflare Tunnel
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: ✅ Checkout 專案原始碼
+      uses: actions/checkout@v3
+
+    - name: ✅ 設定 Python 環境（必要但不跑 Python）
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: ✅ 複製專案檔案到 EC2（scp）
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "."
+        target: "~/weather-bot"
+
+    - name: ✅ 遠端登入 EC2 進行建置與部署
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # 進入專案資料夾
+          cd ~/weather-bot
+
+          # 建立 .env（從 Secret 傳下來）
+          echo "${{ secrets.WEATHERBOTENV }}" > .env
+
+          # 停掉舊容器
+          docker stop weather-bot || true
+          docker rm weather-bot || true
+
+          # 建立新容器
+          docker build -t weather-bot .
+          docker run -d -p 80:8000 --env-file .env --name weather-bot weather-bot
+
+          # 安裝 cloudflared（如尚未安裝）
+          if ! command -v cloudflared &> /dev/null; then
+            curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+            chmod +x cloudflared
+            sudo mv cloudflared /usr/local/bin
+          fi
+
+          # 創建 Cloudflare Tunnel systemd 服務
+          sudo tee /etc/systemd/system/cloudflared.service > /dev/null << EOF
+          [Unit]
+          Description=Cloudflare Tunnel
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:8000
+          Restart=always
+          User=${{ secrets.EC2_USER }}
+          Environment=HOME=/home/${{ secrets.EC2_USER }}
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # 啟動並開機自動啟動 Tunnel
+          sudo systemctl daemon-reexec
+          sudo systemctl daemon-reload
+          sudo systemctl enable cloudflared
+          sudo systemctl restart cloudflared
