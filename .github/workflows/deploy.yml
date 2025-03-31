@@ -9,15 +9,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout 專案原始碼
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: 設定 Python 環境
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    - name: 複製專案檔案到 EC2（scp）
+    - name: Copy files to EC2
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -26,7 +26,7 @@ jobs:
         source: "."
         target: "~/weather-bot"
 
-    - name: 遠端部署到 EC2（ssh）
+    - name: Deploy on EC2 via SSH
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -34,33 +34,36 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd ~/weather-bot
-          
-          # 建立 .env 檔案
+
+          echo "🔧 建立 .env"
           echo "${{ secrets.WEATHERBOTENV }}" > .env
-          
-          # 安裝 Docker（如尚未安裝）
+
+          echo "🐳 安裝 Docker（如尚未安裝）"
           if ! command -v docker &> /dev/null; then
             sudo apt update
             sudo apt install -y docker.io
             sudo usermod -aG docker $USER
+            newgrp docker
           fi
 
-          # 停掉舊容器（如果有）
+          echo "🧼 移除舊容器（如果有）"
           docker stop weather-bot || true
           docker rm weather-bot || true
 
-          # 建立新的容器
+          echo "📦 建立 Docker image"
           docker build -t weather-bot .
+
+          echo "🚀 啟動容器"
           docker run -d -p 80:8000 --env-file .env --name weather-bot weather-bot
 
-          # 安裝 Cloudflared（如尚未裝）
+          echo "☁️ 安裝 cloudflared（如尚未安裝）"
           if ! command -v cloudflared &> /dev/null; then
             curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
             chmod +x cloudflared
             sudo mv cloudflared /usr/local/bin
           fi
 
-          # 建立 systemd 啟動服務
+          echo "🔁 建立 systemd 服務"
           sudo tee /etc/systemd/system/cloudflared.service > /dev/null << EOF
           [Unit]
           Description=Cloudflare Tunnel
@@ -76,8 +79,10 @@ jobs:
           WantedBy=multi-user.target
           EOF
 
-          # 啟動 Cloudflare Tunnel
+          echo "✅ 啟動 cloudflared systemd"
           sudo systemctl daemon-reexec
           sudo systemctl daemon-reload
           sudo systemctl enable cloudflared
           sudo systemctl restart cloudflared
+
+          echo "🎉 全部部署完成！"
