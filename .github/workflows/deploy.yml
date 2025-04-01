@@ -54,7 +54,7 @@ jobs:
           docker build -t weather-bot .
 
           echo "🚀 啟動容器"
-          docker run -d --network host --env-file .env --name weather-bot weather-bot
+          docker run -d -p 8000:8000 --env-file .env --name weather-bot weather-bot
 
           echo "☁️ 安裝 cloudflared（如尚未安裝）"
           if ! command -v cloudflared &> /dev/null; then
