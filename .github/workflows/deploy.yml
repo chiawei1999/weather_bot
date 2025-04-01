@@ -97,5 +97,8 @@ jobs:
           echo "🚀 啟動 cloudflared quick tunnel"
           sudo pkill cloudflared || true
           nohup cloudflared tunnel --url http://localhost:8000 > ~/cloudflared.log 2>&1 &
-          sleep 3
-          cat ~/cloudflared.log | grep -i "trycloudflare.com" || echo "❌ 無法取得 tunnel 網址，請手動登入 EC2 查看 cloudflared.log"
+          echo "⏳ 等待 tunnel 建立中..."
+          sleep 10
+          echo "🔍 查詢 HTTPS 網址："
+          grep -Eo "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" ~/cloudflared.log || echo "❌ 還是抓不到 tunnel 網址，請登入 EC2 用 cat ~/cloudflared.log 查看"
+    
