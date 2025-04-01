@@ -1,4 +1,4 @@
-name: Deploy to EC2 + Cloudflare Tunnel
+name: Deploy to EC2
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
         source: "."
         target: "~/weather-bot"
 
-    - name: Deploy on EC2 via SSH
+    - name: Run deploy script on EC2
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -63,41 +63,10 @@ jobs:
             sudo mv cloudflared /usr/local/bin
           fi
 
-          echo "🔁 建立 systemd 服務"
-          sudo tee /etc/systemd/system/cloudflared.service > /dev/null << EOF
-          [Unit]
-          Description=Cloudflare Tunnel
-          After=network.target
-
-          [Service]
-          ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:8000
-          Restart=always
-          User=ubuntu
-          Environment=HOME=/home/ubuntu
-
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-
-          echo "✅ 啟動 cloudflared systemd"
-          sudo systemctl daemon-reexec
-          sudo systemctl daemon-reload
-          sudo systemctl enable cloudflared
-          sudo systemctl restart cloudflared
-
-          echo "🎉 全部部署完成！"
-    - name: Start cloudflared quick tunnel
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          echo "🚀 啟動 cloudflared quick tunnel"
+          echo "🔁 啟動 cloudflared quick tunnel"
           sudo pkill cloudflared || true
           nohup cloudflared tunnel --url http://localhost:8000 > ~/cloudflared.log 2>&1 &
           echo "⏳ 等待 tunnel 建立中..."
           sleep 10
-          echo "🔍 查詢 HTTPS 網址："
-          grep -aEo "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" ~/cloudflared.log || echo "❌ 還是抓不到 tunnel 網址，請登入 EC2 用 cat ~/cloudflared.log 查看"
-
+          echo "🔍 HTTPS Webhook 網址："
+          grep -aEo "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" ~/cloudflared.log || echo "❌ 抓不到網址，請手動查看 cloudflared.log"
