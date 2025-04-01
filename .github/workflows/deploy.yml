@@ -86,3 +86,16 @@ jobs:
           sudo systemctl restart cloudflared
 
           echo "🎉 全部部署完成！"
+          
+    - name: Start cloudflared quick tunnel
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          echo "🚀 啟動 cloudflared quick tunnel"
+          sudo pkill cloudflared || true
+          nohup cloudflared tunnel --url http://localhost:8000 > ~/cloudflared.log 2>&1 &
+          sleep 3
+          cat ~/cloudflared.log | grep -i "trycloudflare.com" || echo "❌ 無法取得 tunnel 網址，請手動登入 EC2 查看 cloudflared.log"
